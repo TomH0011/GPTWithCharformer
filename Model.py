@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from charformer_pytorch import GBST
+from Config import dropout
 from einops import rearrange
 
 
@@ -10,6 +11,7 @@ class FullCharformerModel(nn.Module):
         super().__init__()
         self.downsample_factor = gbst_downsample_factor
         self.dim = dim  # Store model dimension
+        self.dropout = nn.Dropout(dropout)
 
         self.gbst_stem = GBST(
             num_tokens=num_tokens,
@@ -64,6 +66,8 @@ class FullCharformerModel(nn.Module):
             tgt_mask=causal_mask,
             memory_key_padding_mask=padding_mask
         )
+
+        x = self.dropout(x)
 
         # 4. Upsample to original sequence length
         x = x.permute(0, 2, 1)
