@@ -22,4 +22,4 @@ depth = 6  # Number of attention layers
 heads = 8  # Number of attention heads looking for patterns
 gbst_blocks = ((3, 0), (3, 1), (3, 2))
 weight_decay = 0.1
-dropout = 0.3
+dropout = 0.1
