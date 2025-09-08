@@ -6,7 +6,7 @@ An example of use of a simple GPT with Charformer as the tokeniser
 
 ## Tech Stack
 
-Python, Pytorch
+Python, Pytorch, torchvision
 
 ## Installation
 
