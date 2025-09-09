@@ -12,14 +12,14 @@ if device.type == 'cuda':
     print('Cached:   ', round(torch.cuda.memory_reserved(0) / 1024 ** 3, 1), 'GB')
 
 batch_size = 256
-block_size = 63
+block_size = 255
 learning_rate = 0.0001
-max_iters = 10000
-eval_interval = 500
-MODEL_DIM = 256
+max_iters = 1000000
+eval_interval = 2000
+MODEL_DIM = 512
 DOWNSAMPLE_FACTOR = 3  # block size % DOWNSAMPLE_FACTOR must equal 0
-depth = 6  # Number of attention layers
+depth = 12  # Number of attention layers
 heads = 8  # Number of attention heads looking for patterns
 gbst_blocks = ((3, 0), (3, 1), (3, 2))
 weight_decay = 0.1
-dropout = 0.1
+dropout = 0.2

@@ -47,10 +47,9 @@ class FullCharformerModel(nn.Module):
         return mask
 
     def forward(self, x, mask=None):
-        # 1. Downsample with GBST
+        # Downsample with GBST
         x, mask = self.gbst_stem(x, mask=mask)
 
-        # 2. Prepare masks for the decoder
         # The padding mask from GBST needs to be inverted for the PyTorch transformer
         padding_mask = ~mask if mask is not None else None
 
@@ -58,7 +57,7 @@ class FullCharformerModel(nn.Module):
         seq_len = x.shape[1]
         causal_mask = self._generate_square_subsequent_mask(seq_len, x.device)
 
-        # 3. Pass through the Transformer Decoder
+        # Pass through the Transformer Decoder
         # In a decoder-only setup, the input `x` is used for both `tgt` and `memory`
         x = self.transformer_body(
             tgt=x,
@@ -69,7 +68,7 @@ class FullCharformerModel(nn.Module):
 
         x = self.dropout(x)
 
-        # 4. Upsample to original sequence length
+        # Upsample to original sequence length
         x = x.permute(0, 2, 1)
         x = self.upsampler(x)
         x = x.permute(0, 2, 1)
