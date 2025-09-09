@@ -47,5 +47,5 @@ As well as this it has the option for a simpler transofrmer for character level 
 
 ## Acknowledgements
 
-* Google Deepminds Charformer paper arXiv:2106.12672 [cs.CL] foiund here: (https://arxiv.org/abs/2106.12672)
+* Google Deepminds Charformer paper arXiv:2106.12672 [cs.CL] foiund here: [Charformer](https://arxiv.org/abs/2106.12672)
 * The Charformer module is based on the excellent work by Phil Wang (lucidrains). You can find his repository here: [charformer-pytorch](https://github.com/lucidrains/charformer-pytorch).
