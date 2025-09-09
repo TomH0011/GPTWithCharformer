@@ -1,6 +1,6 @@
 # Large data and model files
 Sample_Text.txt
-charformer_model.pth
+*.pth
 
 # Python virtual environment
 .venv/
