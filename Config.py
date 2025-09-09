@@ -14,11 +14,11 @@ if device.type == 'cuda':
 batch_size = 256
 block_size = 129
 learning_rate = 0.0001
-max_iters = 1176667
+max_iters = 1000000
 eval_interval = 500
-MODEL_DIM = 512
+MODEL_DIM = 256
 DOWNSAMPLE_FACTOR = 3  # block size % DOWNSAMPLE_FACTOR must equal 0
-depth = 8  # Number of attention layers
+depth = 6  # Number of attention layers
 heads = 8  # Number of attention heads looking for patterns
 gbst_blocks = ((3, 0), (3, 1), (3, 2))
 weight_decay = 0.1

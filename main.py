@@ -101,6 +101,10 @@ def main():
                     scaler.update()
                     optimizer.zero_grad(set_to_none=True)
 
+                if steps > 0 and steps % 5000 == 0:
+                    print(f"\nSaving checkpoint at step {steps}...")
+                    torch.save(m.state_dict(), f"charformer_checkpoint_{steps}.pth")
+
         except KeyboardInterrupt:
             print("\nTraining interrupted by user. Saving model...")
 
