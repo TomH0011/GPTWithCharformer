@@ -77,7 +77,7 @@ class FullCharformerModel(nn.Module):
         return self.to_logits(x)
 
     @torch.no_grad()
-    def generate(self, idx, max_new_tokens, block_size):
+    def generate(self, idx, max_new_tokens, block_size, temperature):
         self.eval()  # Set model to evaluation mode
         # idx is the current context of token indices, shape (B, T)
         for _ in range(max_new_tokens):
@@ -89,6 +89,8 @@ class FullCharformerModel(nn.Module):
 
             # Focus only on the last time step
             logits = logits[:, -1, :]
+
+            logits /= temperature
 
             # Apply softmax to get probabilities
             probs = F.softmax(logits, dim=-1)
