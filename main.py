@@ -9,7 +9,7 @@ from Config import (batch_size, block_size, device,
 from ReadTextFile import (train, val, vocab_size, decode, encode)
 from Model import ImprovedCharformerModel, SimpleTransformerModel
 from torch.cuda.amp import GradScaler, autocast
-import time
+import torch.nn as nn
 import numpy as np
 
 
