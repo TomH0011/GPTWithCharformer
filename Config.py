@@ -25,7 +25,7 @@ min_learning_rate = 1e-6  # For cosine annealing
 weight_decay = 0.01  # Lower weight decay
 
 # Training duration
-max_iters = 200000  # Much more training needed for character-level
+max_iters = 850000  # Much more training needed for character-level
 eval_interval = 500  # More frequent evaluation
 eval_iters = 40  # More evaluation batches for stable metrics
 
@@ -44,7 +44,7 @@ top_k = 50  # Top-k sampling
 top_p = 0.95  # Nucleus sampling
 MAX_NEW_TOKENS = 500  # Generation length
 
-# Training optimization
+# Training optimisation
 accumulation_steps = 4  # Gradient accumulation for larger effective batch
 gradient_clip = 1.0  # Gradient clipping value
 

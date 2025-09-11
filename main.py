@@ -239,7 +239,8 @@ def main():
         "The ",
         "Once upon a time",
         "In the beginning",
-        "It was a dark and stormy night"
+        "It was a dark and stormy night",
+        "According to all known laws of aviation"
     ]
 
     for prompt in prompts:
