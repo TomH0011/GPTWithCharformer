@@ -57,6 +57,21 @@ def cosine_annealing_lr(optimizer, current_step, max_steps, min_lr=1e-6):
     return lr
 
 
+def save_model(model, path):
+    """Save model state dict, handling DataParallel wrapper"""
+    state_dict = model.module.state_dict() if hasattr(model, 'module') else model.state_dict()
+    torch.save(state_dict, path)
+
+
+def load_model(model, path, device):
+    """Load model state dict, handling DataParallel wrapper"""
+    state_dict = torch.load(path, map_location=device)
+    if hasattr(model, 'module'):
+        model.module.load_state_dict(state_dict)
+    else:
+        model.load_state_dict(state_dict)
+
+
 def generate_sample(model, prompt="", max_tokens=200, temperature=0.8):
     """Generate a sample of text with optional prompt"""
     model.eval()
@@ -66,11 +81,14 @@ def generate_sample(model, prompt="", max_tokens=200, temperature=0.8):
     else:
         context = torch.zeros((1, 1), dtype=torch.long, device=device)
 
+    # Handle DataParallel wrapper
+    actual_model = model.module if hasattr(model, 'module') else model
+
     # Check which model type we're using
-    if hasattr(model, 'block_size'):  # SimpleTransformerModel
-        generated = model.generate(context, max_tokens, temperature=temperature, top_k=50, top_p=0.95)
+    if hasattr(actual_model, 'block_size'):  # SimpleTransformerModel
+        generated = actual_model.generate(context, max_tokens, temperature=temperature, top_k=50, top_p=0.95)
     else:  # ImprovedCharformerModel
-        generated = model.generate(context, max_tokens, block_size, temperature=temperature, top_k=50, top_p=0.95)
+        generated = actual_model.generate(context, max_tokens, block_size, temperature=temperature, top_k=50, top_p=0.95)
 
     text = decode(generated[0].tolist())
     model.train()
@@ -117,7 +135,8 @@ def main():
         m = nn.DataParallel(m)
 
     # Count parameters
-    total_params = sum(p.numel() for p in m.parameters())
+    actual_model = m.module if hasattr(m, 'module') else m
+    total_params = sum(p.numel() for p in actual_model.parameters())
     print(f"\nModel Parameters: {total_params:,}")
     print(f"Vocabulary Size: {vocab_size}")
     print(f"Training Samples: {len(train):,}")
@@ -126,7 +145,7 @@ def main():
     # Check if model exists
     if os.path.exists(MODEL_PATH):
         print(f"\n✓ Loading saved model from {MODEL_PATH}")
-        m.load_state_dict(torch.load(MODEL_PATH, map_location=device))
+        load_model(m, MODEL_PATH, device)
 
         # Generate sample
         print("\n--- Sample Generation ---")
@@ -174,7 +193,7 @@ def main():
                     best_val_loss = losses['val']
                     patience_counter = 0
                     # Save best model
-                    torch.save(m.state_dict(), MODEL_PATH.replace('.pth', '_best.pth'))
+                    save_model(m, MODEL_PATH.replace('.pth', '_best.pth'))
                 else:
                     patience_counter += 1
                     if patience_counter >= max_patience:
@@ -211,13 +230,14 @@ def main():
             # Checkpoint saving
             if steps > 0 and steps % 10000 == 0:
                 checkpoint_path = f"checkpoint_{steps}.pth"
-                torch.save({
+                checkpoint_data = {
                     'step': steps,
-                    'model_state_dict': m.state_dict(),
+                    'model_state_dict': m.module.state_dict() if hasattr(m, 'module') else m.state_dict(),
                     'optimizer_state_dict': optimiser.state_dict(),
                     'loss': loss.item(),
                     'best_val_loss': best_val_loss
-                }, checkpoint_path)
+                }
+                torch.save(checkpoint_data, checkpoint_path)
                 print(f"\n✓ Checkpoint saved: {checkpoint_path}")
 
     except KeyboardInterrupt:
@@ -225,13 +245,13 @@ def main():
 
     # Save final model
     print(f"\n✓ Saving final model to {MODEL_PATH}")
-    torch.save(m.state_dict(), MODEL_PATH)
+    save_model(m, MODEL_PATH)
 
     # Load best model if it exists
     best_model_path = MODEL_PATH.replace('.pth', '_best.pth')
     if os.path.exists(best_model_path):
         print(f"✓ Loading best model from validation")
-        m.load_state_dict(torch.load(best_model_path, map_location=device))
+        load_model(m, best_model_path, device)
 
     # Final text generation
     print("\n" + "=" * 50)
