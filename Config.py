@@ -14,7 +14,7 @@ if device.type == 'cuda':
 # TRAINING HYPERPARAMETERS
 
 # Batch and sequence settings
-batch_size = 1400  # Reduced for stability
+batch_size = 32  # Reduced for stability
 block_size_iter = 84  # Adjusted for better divisibility
 DOWNSAMPLE_FACTOR = 4  # Standard downsampling
 block_size = DOWNSAMPLE_FACTOR * block_size_iter  # 336 tokens context
@@ -25,7 +25,7 @@ min_learning_rate = 1e-6  # For cosine annealing
 weight_decay = 0.01  # Lower weight decay
 
 # Training duration
-max_iters = 500000  # Much more training needed for character-level
+max_iters = 1000000  # Much more training needed for character-level
 eval_interval = 500  # More frequent evaluation
 eval_iters = 40  # More evaluation batches for stable metrics
 
