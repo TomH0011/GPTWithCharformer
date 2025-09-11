@@ -25,7 +25,7 @@ min_learning_rate = 1e-6  # For cosine annealing
 weight_decay = 0.01  # Lower weight decay
 
 # Training duration
-max_iters = 850000  # Much more training needed for character-level
+max_iters = 500000  # Much more training needed for character-level
 eval_interval = 500  # More frequent evaluation
 eval_iters = 40  # More evaluation batches for stable metrics
 
