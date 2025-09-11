@@ -14,7 +14,7 @@ if device.type == 'cuda':
 # TRAINING HYPERPARAMETERS
 
 # Batch and sequence settings
-batch_size = 1024  # Reduced for stability
+batch_size = 1400  # Reduced for stability
 block_size_iter = 84  # Adjusted for better divisibility
 DOWNSAMPLE_FACTOR = 4  # Standard downsampling
 block_size = DOWNSAMPLE_FACTOR * block_size_iter  # 336 tokens context
