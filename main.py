@@ -157,72 +157,68 @@ def main():
 
     print("\n--- Starting Training ---")
 
-    steps_per_epoch = len(train) // batch_size
-    epochs = max_iters // steps_per_epoch
-
     try:
-        for epoch in range(epochs):
-            for steps in (pbar := tqdm(range(steps_per_epoch), desc=f"Epoch {epoch+1}/{epochs}")):
-                # Adjust learning rate
-                current_lr = cosine_annealing_lr(optimiser, steps, max_iters)
+        for steps in (pbar := tqdm(range(max_iters), desc='Training')):
+            # Adjust learning rate
+            current_lr = cosine_annealing_lr(optimiser, steps, max_iters)
 
-                # Evaluation
-                if steps % eval_interval == 0 or steps == max_iters - 1:
-                    losses = estimate_loss(m)
-                    pbar.set_description(
-                        f"Step {steps}: Train loss {losses['train']:.4f}, Val loss {losses['val']:.4f}, LR {current_lr:.2e}"
-                    )
+            # Evaluation
+            if steps % eval_interval == 0 or steps == max_iters - 1:
+                losses = estimate_loss(m)
+                pbar.set_description(
+                    f"Step {steps}: Train loss {losses['train']:.4f}, Val loss {losses['val']:.4f}, LR {current_lr:.2e}"
+                )
 
-                    # Early stopping check
-                    if losses['val'] < best_val_loss:
-                        best_val_loss = losses['val']
-                        patience_counter = 0
-                        # Save best model
-                        torch.save(m.state_dict(), MODEL_PATH.replace('.pth', '_best.pth'))
-                    else:
-                        patience_counter += 1
-                        if patience_counter >= max_patience:
-                            print(f"\nEarly stopping triggered after {steps} steps")
-                            break
+                # Early stopping check
+                if losses['val'] < best_val_loss:
+                    best_val_loss = losses['val']
+                    patience_counter = 0
+                    # Save best model
+                    torch.save(m.state_dict(), MODEL_PATH.replace('.pth', '_best.pth'))
+                else:
+                    patience_counter += 1
+                    if patience_counter >= max_patience:
+                        print(f"\nEarly stopping triggered after {steps} steps")
+                        break
 
-                    # Generate sample every 5000 steps
-                    if steps > 0 and steps % 5000 == 0:
-                        print(f"\n--- Sample at step {steps} ---")
-                        sample = generate_sample(m, prompt="Once upon a time", max_tokens=100, temperature=0.8)
-                        print(sample[:200] + "..." if len(sample) > 200 else sample)
-                        print("-" * 50)
+                # Generate sample every 5000 steps
+                if steps > 0 and steps % 5000 == 0:
+                    print(f"\n--- Sample at step {steps} ---")
+                    sample = generate_sample(m, prompt="Once upon a time", max_tokens=100, temperature=0.8)
+                    print(sample[:200] + "..." if len(sample) > 200 else sample)
+                    print("-" * 50)
 
-                # Training step
-                xb, yb = get_batch('train')
+            # Training step
+            xb, yb = get_batch('train')
 
-                # Use autocast for efficiency
-                with autocast():
-                    logits = m(xb)
-                    loss = F.cross_entropy(logits.view(-1, vocab_size), yb.view(-1)) / accumulation_steps
+            # Use autocast for efficiency
+            with autocast():
+                logits = m(xb)
+                loss = F.cross_entropy(logits.view(-1, vocab_size), yb.view(-1)) / accumulation_steps
 
-                scaler.scale(loss).backward()
+            scaler.scale(loss).backward()
 
-                # Gradient accumulation
-                if (steps + 1) % accumulation_steps == 0:
-                    # Gradient clipping for stability
-                    scaler.unscale_(optimiser)
-                    torch.nn.utils.clip_grad_norm_(m.parameters(), max_norm=1.0)
+            # Gradient accumulation
+            if (steps + 1) % accumulation_steps == 0:
+                # Gradient clipping for stability
+                scaler.unscale_(optimiser)
+                torch.nn.utils.clip_grad_norm_(m.parameters(), max_norm=1.0)
 
-                    scaler.step(optimiser)
-                    scaler.update()
-                    optimiser.zero_grad(set_to_none=True)
+                scaler.step(optimiser)
+                scaler.update()
+                optimiser.zero_grad(set_to_none=True)
 
-                # Checkpoint saving
-                if steps > 0 and steps % 10000 == 0:
-                    checkpoint_path = f"checkpoint_{steps}.pth"
-                    torch.save({
-                        'step': steps,
-                        'model_state_dict': m.state_dict(),
-                        'optimizer_state_dict': optimiser.state_dict(),
-                        'loss': loss.item(),
-                        'best_val_loss': best_val_loss
-                    }, checkpoint_path)
-                    print(f"\n✓ Checkpoint saved: {checkpoint_path}")
+            # Checkpoint saving
+            if steps > 0 and steps % 10000 == 0:
+                checkpoint_path = f"checkpoint_{steps}.pth"
+                torch.save({
+                    'step': steps,
+                    'model_state_dict': m.state_dict(),
+                    'optimizer_state_dict': optimiser.state_dict(),
+                    'loss': loss.item(),
+                    'best_val_loss': best_val_loss
+                }, checkpoint_path)
+                print(f"\n✓ Checkpoint saved: {checkpoint_path}")
 
     except KeyboardInterrupt:
         print("\n\n✗ Training interrupted by user")
