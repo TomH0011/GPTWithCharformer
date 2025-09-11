@@ -85,30 +85,30 @@ def main():
     print("1. Improved Charformer with GBST (recommended for subword learning)")
     print("2. Simple Transformer (recommended for character-level)")
 
-    model_choice = input("Enter choice (1 or 2): ").strip()
+    # model_choice = input("Enter choice (1 or 2): ").strip()
 
-    if model_choice == "1":
-        print("\n✓ Using Improved Charformer Model")
-        model = ImprovedCharformerModel(
-            num_tokens=vocab_size,
-            dim=MODEL_DIM,
-            depth=depth,
-            heads=heads,
-            gbst_blocks=gbst_blocks,
-            gbst_downsample_factor=DOWNSAMPLE_FACTOR
-        )
-        MODEL_PATH = 'improved_charformer_model.pth'
-    else:
-        print("\n✓ Using Simple Transformer Model")
-        model = SimpleTransformerModel(
-            num_tokens=vocab_size,
-            dim=MODEL_DIM,
-            depth=depth,
-            heads=heads,
-            block_size=block_size,
-            dropout=0.2
-        )
-        MODEL_PATH = 'simple_transformer_model.pth'
+    # if model_choice == "1":
+    print("\n✓ Using Improved Charformer Model")
+    model = ImprovedCharformerModel(
+        num_tokens=vocab_size,
+        dim=MODEL_DIM,
+        depth=depth,
+        heads=heads,
+        gbst_blocks=gbst_blocks,
+        gbst_downsample_factor=DOWNSAMPLE_FACTOR
+    )
+    MODEL_PATH = 'improved_charformer_model.pth'
+    # else:
+    #     print("\n✓ Using Simple Transformer Model")
+    #     model = SimpleTransformerModel(
+    #         num_tokens=vocab_size,
+    #         dim=MODEL_DIM,
+    #         depth=depth,
+    #         heads=heads,
+    #         block_size=block_size,
+    #         dropout=0.2
+    #     )
+    #     MODEL_PATH = 'simple_transformer_model.pth'
 
     m = model.to(device)
 
