@@ -112,6 +112,10 @@ def main():
 
     m = model.to(device)
 
+    if torch.cuda.device_count() > 1:
+        print(f"✓ Using {torch.cuda.device_count()} GPUs!")
+        m = nn.DataParallel(m)
+
     # Count parameters
     total_params = sum(p.numel() for p in m.parameters())
     print(f"\nModel Parameters: {total_params:,}")
