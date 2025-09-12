@@ -1,42 +1,78 @@
 import torch
+import torch.distributed as dist
+from torch.nn.parallel import DistributedDataParallel as DDP
+import os
 
-device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
+# Multi-GPU Setup
+def setup_distributed():
+    """Setup distributed training for multiple GPUs"""
+    if 'KAGGLE_KERNEL_RUN_TYPE' in os.environ:
+        # Kaggle environment setup
+        os.environ['MASTER_ADDR'] = 'localhost'
+        os.environ['MASTER_PORT'] = '12355'
+        os.environ['WORLD_SIZE'] = '2'  # 2 T4 GPUs
+
+    # Initialise distributed training
+    if torch.cuda.device_count() > 1:
+        dist.init_process_group(backend='nccl')
+        local_rank = int(os.environ.get('LOCAL_RANK', 0))
+        torch.cuda.set_device(local_rank)
+        device = torch.device(f'cuda:{local_rank}')
+        print(f"Using GPU {local_rank}")
+    else:
+        device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        local_rank = 0
+
+    return device, local_rank
+
+
+def cleanup_distributed():
+    if dist.is_initialized():
+        dist.destroy_process_group()
+
+
+# Device setup
+device, local_rank = setup_distributed()
+is_distributed = torch.cuda.device_count() > 1 and dist.is_initialized()
 
 print(f'Using device: {device}')
+print(f'Number of GPUs: {torch.cuda.device_count()}')
+print(f'Distributed training: {is_distributed}')
 
-# Additional Info when using cuda
 if device.type == 'cuda':
-    print(torch.cuda.get_device_name(0))
-    print('Memory Usage:')
-    print('Allocated:', round(torch.cuda.memory_allocated(0) / 1024 ** 3, 1), 'GB')
-    print('Cached:   ', round(torch.cuda.memory_reserved(0) / 1024 ** 3, 1), 'GB')
+    for i in range(torch.cuda.device_count()):
+        print(f'GPU {i}: {torch.cuda.get_device_name(i)}')
+        print(f'Memory: {torch.cuda.get_device_properties(i).total_memory / 1024 ** 3:.1f} GB')
 
 # TRAINING HYPERPARAMETERS
 
 # Batch and sequence settings
-batch_size = 64  # Reduced for stability
-block_size_iter = 84  # Adjusted for better divisibility
+batch_size = 32  # Reduced for stability
+effective_batch_size = batch_size * max(1, torch.cuda.device_count())
+block_size_iter = 128  # Adjusted for better divisibility
 DOWNSAMPLE_FACTOR = 4  # Standard downsampling
 block_size = DOWNSAMPLE_FACTOR * block_size_iter  # 336 tokens context
 
 # Learning rate settings
-learning_rate = 3e-4  # Standard for transformers
-min_learning_rate = 1e-6  # For cosine annealing
+base_learning_rate = 3e-4
+learning_rate = base_learning_rate * (effective_batch_size / 64)  # Standard for transformers
+min_learning_rate = learning_rate / 100  # For cosine annealing
 weight_decay = 0.01  # Lower weight decay
 
 # Training duration
-max_iters = 200000  # Much more training needed for character-level
+max_iters = 100000  # Much more training needed for character-level
 eval_interval = 500  # More frequent evaluation
-eval_iters = 40  # More evaluation batches for stable metrics
+eval_iters = 50  # More evaluation batches for stable metrics
 
 # Model architecture
-MODEL_DIM = 512  # Keep this
-depth = 8  # Number of transformer layers
-heads = 8  # Number of attention heads
+MODEL_DIM = 768  # Keep this
+depth = 12  # Number of transformer layers
+heads = 12  # Number of attention heads
 dropout = 0.1  # Reduced dropout for better learning
 
 # GBST settings (for Charformer)
-gbst_blocks = ((2, 0), (3, 0), (4, 0), (5, 0), (6, 0))  # More variety in block sizes
+gbst_blocks = ((2, 0), (3, 0), (4, 0), (5, 0), (6, 0), (7, 0))  # More variety in block sizes
 
 # Generation settings
 temperature = 0.8  # Balanced creativity
@@ -45,7 +81,7 @@ top_p = 0.95  # Nucleus sampling
 MAX_NEW_TOKENS = 500  # Generation length
 
 # Training optimization
-accumulation_steps = 4  # Gradient accumulation for larger effective batch
+accumulation_steps = 2  # Gradient accumulation for larger effective batch
 gradient_clip = 1.0  # Gradient clipping value
 
 
