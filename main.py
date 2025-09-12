@@ -141,34 +141,34 @@ def main():
     print("1. Simple Transformer (Recommended for dual T4)")
     print("2. Improved Charformer with GBST")
 
-    while True:
-        choice = input("Enter choice (1 or 2): ").strip()
-        if choice in ['1', '2']:
-            break
-        print("Please enter 1 or 2")
+    # while True:
+    #     choice = input("Enter choice (1 or 2): ").strip()
+    #     if choice in ['1', '2']:
+    #         break
+    #     print("Please enter 1 or 2")
 
-    if choice == "1":
-        print("\nUsing Simple Transformer Model")
-        model = SimpleTransformerModel(
-            num_tokens=vocab_size,
-            dim=MODEL_DIM,
-            depth=depth,
-            heads=heads,
-            block_size=block_size,
-            dropout=dropout
-        )
-        model_path = 'simple_transformer_dual_t4.pth'
-    else:
-        print("\nUsing Improved Charformer Model")
-        model = ImprovedCharformerModel(
-            num_tokens=vocab_size,
-            dim=MODEL_DIM,
-            depth=depth,
-            heads=heads,
-            gbst_blocks=gbst_blocks,
-            gbst_downsample_factor=DOWNSAMPLE_FACTOR
-        )
-        model_path = 'charformer_dual_t4.pth'
+    # if choice == "1":
+    print("\nUsing Simple Transformer Model")
+    model = SimpleTransformerModel(
+        num_tokens=vocab_size,
+        dim=MODEL_DIM,
+        depth=depth,
+        heads=heads,
+        block_size=block_size,
+        dropout=dropout
+    )
+    model_path = 'simple_transformer_dual_t4.pth'
+    # else:
+    #     print("\nUsing Improved Charformer Model")
+    #     model = ImprovedCharformerModel(
+    #         num_tokens=vocab_size,
+    #         dim=MODEL_DIM,
+    #         depth=depth,
+    #         heads=heads,
+    #         gbst_blocks=gbst_blocks,
+    #         gbst_downsample_factor=DOWNSAMPLE_FACTOR
+    #     )
+    #     model_path = 'charformer_dual_t4.pth'
 
     # Move model to device and setup multi-GPU
     model = model.to(device)
