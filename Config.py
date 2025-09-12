@@ -1,44 +1,11 @@
 import torch
-import torch.distributed as dist
-from torch.nn.parallel import DistributedDataParallel as DDP
 import os
 
-
-# Multi-GPU Setup
-def setup_distributed():
-    """Setup distributed training for multiple GPUs"""
-    if 'KAGGLE_KERNEL_RUN_TYPE' in os.environ:
-        # Kaggle environment setup
-        os.environ['MASTER_ADDR'] = 'localhost'
-        os.environ['MASTER_PORT'] = '12355'
-        os.environ['WORLD_SIZE'] = '2'  # 2 T4 GPUs
-
-    # Initialise distributed training
-    if torch.cuda.device_count() > 1:
-        dist.init_process_group(backend='nccl')
-        local_rank = int(os.environ.get('LOCAL_RANK', 0))
-        torch.cuda.set_device(local_rank)
-        device = torch.device(f'cuda:{local_rank}')
-        print(f"Using GPU {local_rank}")
-    else:
-        device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-        local_rank = 0
-
-    return device, local_rank
-
-
-def cleanup_distributed():
-    if dist.is_initialized():
-        dist.destroy_process_group()
-
-
-# Device setup
-device, local_rank = setup_distributed()
-is_distributed = torch.cuda.device_count() > 1 and dist.is_initialized()
+# Simple device setup - let main.py handle distributed training
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 print(f'Using device: {device}')
 print(f'Number of GPUs: {torch.cuda.device_count()}')
-print(f'Distributed training: {is_distributed}')
 
 if device.type == 'cuda':
     for i in range(torch.cuda.device_count()):

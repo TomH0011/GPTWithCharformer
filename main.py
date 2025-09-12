@@ -1,65 +1,18 @@
 import torch
 import torch.nn.functional as F
-import torch.distributed as dist
-from torch.nn.parallel import DistributedDataParallel as DDP
 import os
 from tqdm import tqdm
 import numpy as np
 import time
 
-# Import your modules
+# Import configurations and modules
+from Config import *
 from ReadTextFile import train, val, vocab_size, decode, encode
 from Model import SimpleTransformerModel, ImprovedCharformerModel
 from torch.cuda.amp import GradScaler, autocast
 
 
-def setup_distributed():
-    """Setup distributed training for Kaggle's dual T4 environment"""
-    # Check if we have multiple GPUs
-    if torch.cuda.device_count() <= 1:
-        print("Single GPU detected, using standard training")
-        return torch.device('cuda' if torch.cuda.is_available() else 'cpu'), 0, False
-
-    # Kaggle environment setup for distributed training
-    if 'KAGGLE_KERNEL_RUN_TYPE' in os.environ:
-        os.environ['MASTER_ADDR'] = '127.0.0.1'
-        os.environ['MASTER_PORT'] = '29500'
-        os.environ['WORLD_SIZE'] = str(torch.cuda.device_count())
-        os.environ['RANK'] = '0'
-        os.environ['LOCAL_RANK'] = '0'
-
-    try:
-        # Initialize process group
-        dist.init_process_group(
-            backend='nccl',
-            init_method='env://',
-            world_size=torch.cuda.device_count(),
-            rank=0
-        )
-
-        local_rank = int(os.environ.get('LOCAL_RANK', 0))
-        torch.cuda.set_device(local_rank)
-        device = torch.device(f'cuda:{local_rank}')
-        is_distributed = True
-
-        print(f"✓ Distributed training initialized on {torch.cuda.device_count()} GPUs")
-
-    except Exception as e:
-        print(f"Failed to initialize distributed training: {e}")
-        print("Falling back to DataParallel")
-        device = torch.device('cuda:0')
-        is_distributed = False
-
-    return device, local_rank, is_distributed
-
-
-def cleanup_distributed():
-    """Cleanup distributed training"""
-    if dist.is_initialized():
-        dist.destroy_process_group()
-
-
-def get_batch(split, batch_size, block_size, device):
+def get_batch(split):
     """Get a batch of training data"""
     data = train if split == 'train' else val
     ix = torch.randint(len(data) - block_size, (batch_size,))
@@ -69,7 +22,7 @@ def get_batch(split, batch_size, block_size, device):
 
 
 @torch.no_grad()
-def estimate_loss(model, eval_iters, batch_size, block_size, device):
+def estimate_loss(model):
     """Estimate loss on train and validation sets"""
     out = {}
     model.eval()
@@ -77,7 +30,7 @@ def estimate_loss(model, eval_iters, batch_size, block_size, device):
     for split in ['train', 'val']:
         losses = torch.zeros(eval_iters)
         for k in range(eval_iters):
-            X, Y = get_batch(split, min(batch_size, 16), block_size, device)  # Smaller batch for eval
+            X, Y = get_batch(split)
 
             with autocast():
                 logits = model(X)
@@ -108,7 +61,7 @@ def cosine_annealing_lr(optimizer, current_step, max_steps, base_lr, min_lr=1e-6
     return lr
 
 
-def generate_sample(model, prompt="", max_tokens=200, temperature=0.8, device='cuda'):
+def generate_sample(model, prompt="", max_tokens=200, temperature=0.8):
     """Generate text sample with the model"""
     model.eval()
 
@@ -117,18 +70,17 @@ def generate_sample(model, prompt="", max_tokens=200, temperature=0.8, device='c
     else:
         context = torch.zeros((1, 1), dtype=torch.long, device=device)
 
-    # Handle DDP wrapped models
+    # Handle DataParallel wrapped models
     model_for_generation = model.module if hasattr(model, 'module') else model
 
     # Generate based on model type
     if hasattr(model_for_generation, 'block_size'):  # SimpleTransformerModel
         generated = model_for_generation.generate(
-            context, max_tokens, temperature=temperature, top_k=50, top_p=0.95
+            context, max_tokens, temperature=temperature, top_k=top_k, top_p=top_p
         )
     else:  # ImprovedCharformerModel
-        block_size = getattr(model_for_generation, 'effective_block_size', 512)
         generated = model_for_generation.generate(
-            context, max_tokens, block_size, temperature=temperature, top_k=50, top_p=0.95
+            context, max_tokens, block_size, temperature=temperature, top_k=top_k, top_p=top_p
         )
 
     text = decode(generated[0].tolist())
@@ -138,7 +90,7 @@ def generate_sample(model, prompt="", max_tokens=200, temperature=0.8, device='c
 
 def save_checkpoint(model, optimizer, scaler, step, loss, best_val_loss, path):
     """Save training checkpoint"""
-    # Extract state dict from DDP if necessary
+    # Extract state dict from DataParallel if necessary
     state_dict = model.module.state_dict() if hasattr(model, 'module') else model.state_dict()
 
     checkpoint = {
@@ -152,15 +104,15 @@ def save_checkpoint(model, optimizer, scaler, step, loss, best_val_loss, path):
     }
 
     torch.save(checkpoint, path)
-    print(f"✓ Checkpoint saved: {path}")
+    print(f"Checkpoint saved: {path}")
 
 
 def load_checkpoint(path, model, optimizer=None, scaler=None):
     """Load training checkpoint"""
-    checkpoint = torch.load(path, map_location='cpu')
+    checkpoint = torch.load(path, map_location=device)
 
     # Load model state
-    if hasattr(model, 'module'):  # DDP wrapped
+    if hasattr(model, 'module'):  # DataParallel wrapped
         model.module.load_state_dict(checkpoint['model_state_dict'])
     else:
         model.load_state_dict(checkpoint['model_state_dict'])
@@ -176,45 +128,16 @@ def load_checkpoint(path, model, optimizer=None, scaler=None):
 
 
 def main():
-    print("🚀 DUAL T4 CHARFORMER TRAINING SYSTEM")
+    print("DUAL T4 CHARFORMER TRAINING SYSTEM")
     print("=" * 50)
 
-    # Setup distributed training
-    device, local_rank, is_distributed = setup_distributed()
-
     # Display system info
-    print(f"Device: {device}")
-    print(f"GPUs available: {torch.cuda.device_count()}")
     print(f"Vocabulary size: {vocab_size:,}")
     print(f"Training samples: {len(train):,}")
     print(f"Validation samples: {len(val):,}")
 
-    # Training hyperparameters optimized for dual T4
-    batch_size = 24 if torch.cuda.device_count() > 1 else 16  # Per GPU
-    block_size = 512  # Context length
-    learning_rate = 3e-4
-    max_iters = 50000
-    eval_interval = 500
-    eval_iters = 50
-
-    # Model architecture
-    MODEL_DIM = 768
-    depth = 8
-    heads = 8
-    dropout = 0.1
-
-    accumulation_steps = 2
-    gradient_clip = 1.0
-
-    print(f"\n📊 Training Configuration:")
-    print(f"Batch size per GPU: {batch_size}")
-    print(f"Effective batch size: {batch_size * max(1, torch.cuda.device_count())}")
-    print(f"Block size: {block_size}")
-    print(f"Learning rate: {learning_rate}")
-    print(f"Max iterations: {max_iters}")
-
     # Model selection
-    print("\n🤖 Select model architecture:")
+    print("\nSelect model architecture:")
     print("1. Simple Transformer (Recommended for dual T4)")
     print("2. Improved Charformer with GBST")
 
@@ -225,7 +148,7 @@ def main():
         print("Please enter 1 or 2")
 
     if choice == "1":
-        print("\n✓ Using Simple Transformer Model")
+        print("\nUsing Simple Transformer Model")
         model = SimpleTransformerModel(
             num_tokens=vocab_size,
             dim=MODEL_DIM,
@@ -236,9 +159,7 @@ def main():
         )
         model_path = 'simple_transformer_dual_t4.pth'
     else:
-        print("\n✓ Using Improved Charformer Model")
-        DOWNSAMPLE_FACTOR = 4
-        gbst_blocks = ((2, 0), (3, 0), (4, 0), (5, 0))
+        print("\nUsing Improved Charformer Model")
         model = ImprovedCharformerModel(
             num_tokens=vocab_size,
             dim=MODEL_DIM,
@@ -249,24 +170,21 @@ def main():
         )
         model_path = 'charformer_dual_t4.pth'
 
-    # Move model to device
+    # Move model to device and setup multi-GPU
     model = model.to(device)
-
-    # Setup distributed training or DataParallel
     if torch.cuda.device_count() > 1:
-        if is_distributed:
-            model = DDP(model, device_ids=[local_rank], output_device=local_rank)
-            print("✓ Using DistributedDataParallel")
-        else:
-            model = torch.nn.DataParallel(model)
-            print("✓ Using DataParallel")
+        print(f"Using {torch.cuda.device_count()} GPUs with DataParallel")
+        model = torch.nn.DataParallel(model)
+        # Adjust batch size for multiple GPUs
+        effective_batch_size = batch_size * torch.cuda.device_count()
+        print(f"Effective batch size: {effective_batch_size}")
 
     # Count parameters
     total_params = sum(p.numel() for p in model.parameters())
-    print(f"\n📈 Model parameters: {total_params:,}")
+    print(f"Model parameters: {total_params:,}")
 
     # Setup optimizer and scaler
-    optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate, weight_decay=0.01)
+    optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate, weight_decay=weight_decay)
     scaler = GradScaler()
 
     # Check for existing checkpoint
@@ -274,21 +192,20 @@ def main():
     best_val_loss = float('inf')
 
     if os.path.exists(model_path):
-        print(f"\n✓ Loading checkpoint: {model_path}")
+        print(f"\nLoading checkpoint: {model_path}")
         start_step, best_val_loss = load_checkpoint(model_path, model, optimizer, scaler)
         print(f"Resuming from step {start_step}, best val loss: {best_val_loss:.4f}")
 
         # Generate sample
         print("\n--- Sample Generation ---")
-        sample = generate_sample(model, prompt="The quick brown", max_tokens=150, device=device)
+        sample = generate_sample(model, prompt="The quick brown", max_tokens=150)
         print(sample)
 
         cont = input("\nContinue training? (y/n): ").strip().lower()
         if cont != 'y':
-            cleanup_distributed()
             return
 
-    print(f"\n🎯 Starting training from step {start_step}")
+    print(f"\nStarting training from step {start_step}")
     print("=" * 50)
 
     # Training loop
@@ -304,7 +221,7 @@ def main():
 
             # Evaluation
             if step % eval_interval == 0 or step == max_iters - 1:
-                losses = estimate_loss(model, eval_iters, batch_size, block_size, device)
+                losses = estimate_loss(model)
 
                 pbar.set_description(
                     f"Step {step} | Train: {losses['train']:.4f} | Val: {losses['val']:.4f} | LR: {current_lr:.2e}"
@@ -319,12 +236,12 @@ def main():
                 # Generate sample every 2000 steps
                 if step > 0 and step % 2000 == 0:
                     print(f"\n--- Sample at step {step} ---")
-                    sample = generate_sample(model, prompt="Once upon a time", max_tokens=200, device=device)
+                    sample = generate_sample(model, prompt="Once upon a time", max_tokens=200)
                     print(sample[:300] + "..." if len(sample) > 300 else sample)
                     print("-" * 50)
 
             # Training step
-            xb, yb = get_batch('train', batch_size, block_size, device)
+            xb, yb = get_batch('train')
 
             with autocast():
                 logits = model(xb)
@@ -346,21 +263,21 @@ def main():
                 save_checkpoint(model, optimizer, scaler, step, loss.item(), best_val_loss, model_path)
 
     except KeyboardInterrupt:
-        print("\n⚠️ Training interrupted by user")
+        print("\nTraining interrupted by user")
 
     # Final save
-    print(f"\n💾 Saving final model to {model_path}")
+    print(f"\nSaving final model to {model_path}")
     save_checkpoint(model, optimizer, scaler, step, loss.item(), best_val_loss, model_path)
 
     # Load best model for generation
     best_model_path = model_path.replace('.pth', '_best.pth')
     if os.path.exists(best_model_path):
-        print("🏆 Loading best model for final generation")
+        print("Loading best model for final generation")
         load_checkpoint(best_model_path, model)
 
     # Final generation showcase
     print("\n" + "=" * 60)
-    print("🎨 FINAL TEXT GENERATION SHOWCASE")
+    print("FINAL TEXT GENERATION SHOWCASE")
     print("=" * 60)
 
     prompts = [
@@ -379,9 +296,8 @@ def main():
         generated_text = generate_sample(
             model,
             prompt=prompt,
-            max_tokens=300,
-            temperature=0.8,
-            device=device
+            max_tokens=MAX_NEW_TOKENS,
+            temperature=temperature
         )
 
         # Display truncated text
@@ -391,12 +307,9 @@ def main():
 
     # Training summary
     total_time = time.time() - start_time
-    print(f"\n📊 Training completed in {total_time / 3600:.2f} hours")
-    print(f"📈 Final validation loss: {best_val_loss:.4f}")
-    print(f"💾 Model saved as: {model_path}")
-
-    # Cleanup
-    cleanup_distributed()
+    print(f"\nTraining completed in {total_time / 3600:.2f} hours")
+    print(f"Final validation loss: {best_val_loss:.4f}")
+    print(f"Model saved as: {model_path}")
 
 
 if __name__ == '__main__':
